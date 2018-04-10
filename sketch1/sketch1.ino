@@ -5,6 +5,8 @@
 #define pwmVoltageSensorPin  A3
 #define motorVoltageSensorPin  A4
 #define irSignalPin A8
+#define encoder1 A7
+#define encoder2 A6
 #define hbMode 8
 #define hbIn1A 9
 #define hbIn2A 10
@@ -40,6 +42,16 @@ void setup() {
   pinMode(A8, INPUT);
   pinMode(A9, INPUT);
 
+  
+
+}
+
+int ADC(int analogValue) {
+  if (analogValue > adcCenter) {
+    return 1;
+  } else {
+    return 0;
+  }
 }
 
 void loop() {
@@ -52,6 +64,6 @@ void loop() {
   }
   float irV = scaleVadc * float(irRead) / float(analogAverages*adcMax);
 
-  Serial.println(irV);
+  Serial.println(String(ADC(analogRead(A7))) + " " + String(ADC(analogRead(A6))));
 
 }
