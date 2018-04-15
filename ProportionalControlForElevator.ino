@@ -125,7 +125,7 @@ void loop() {  // Main code, runs repeatedly
   float errorV = (desiredDeltaBackEMF - measuredDeltaBackEMF);
 
   // Angle error
-  float actualHeight = 20/heightV;
+  float actualHeight = 20/(heightV-0.25);
   //float measuredHeight = -heightV + scaleVadc/1.9; //not sure what this is doing
   float errorH = (desiredHeight - actualHeight);
 
