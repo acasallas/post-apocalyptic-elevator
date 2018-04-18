@@ -1,15 +1,43 @@
 #include <math.h>
 
-//Lab00 Variables To Modify ******************************
-float KpA =0.5; // Proportional Gain for Angle Error
-float KpV = 0.0;  // Proportional Gain for BackEMF Error
-float nominalBackEMF = 0.5;
-float direct = 2.5;  
-float desiredDeltaBackEMF = 0.0; // Alternate + and - offset from nominal
-float desiredHeight = 25.0;
-// motorCmd=direct+KpA*errorAngle+KpV*errorDeltaBackEMF
+// Calibration Variables
+float directV = 3.30;  // RESET THIS VALUE with zero state gains so the prop is nominally horizontal
+float nominalBemfV = 1.18; // RESET THIS VALUE of motorBemf when horizontal, to use in  linearization
+float angleOffsetV = 0.13;  // RESET THIS VALUE precisely horizontal arm --> precisely zero angle
 
-unsigned int deltaT = 10000;      // Sample period in microseconds.
+// Gains
+float Kangle = 10.9091; // Gain for arm angle state
+float Komega = 2; // Gain for arm rotational velocity state
+float Kemf= 0;//10.2397;  // Gain for backEmf state
+float Kr = 10.9091; // Change Kr with K!! 
+
+// Loop timing, Derivative and integral variables
+unsigned int deltaT = 1000;         // Sample period in microseconds.
+
+#define pastSize 5                 // interval for delta, larger=less noise, more delay.
+float dTsec = 1.0e-6*deltaT;       // The period in seconds. 
+float scaleDeriv = 1.0/(dTsec*pastSize); // Divide deltas by interval.   
+
+float errorVintegral;                // Variable for integrating angle errors.
+float integralMax = 200;            // Maximum value of the integral
+
+// ***************************************************************
+// Variables for loop control 
+elapsedMicros loopTime; // loopTime used to force precise deltaT between starts
+unsigned int headroom;  // Headroom=post execution time before next loop start.
+boolean switchFlag;  // Used to monitor loop timing.
+unsigned int alternateCount;  // Used to count loops since last alternate
+int loopCounter;
+#define numSkip 20
+bool first_time = false;
+String config_message = "&A~Desired~5&C&S~Desired~A~-3.0~3.0~0.1&T~Theta~F4~-3.0~3.0&T~Omega~F4~-10.0~10.0&T~Vbemf~F4~-5.0~5.0&T~Error~F4~-3.0~3.0&T~MCmd~F4~0~5&D~100&H~4&";
+                        
+// Storage for past values.
+float pastAngleV[pastSize]; 
+
+// Storage for browser communication
+char buf[60]; 
+float desiredAngleV = 0;
 
 // Definition based on 6302 wiring.
 #define alternatePeriod 1.0 // Time Between alts in seconds
@@ -29,18 +57,11 @@ unsigned int deltaT = 10000;      // Sample period in microseconds.
 #define adcCenter 8492 //Teensy ADC set to 14 bits, 16384/2 = 8192
 #define adcMax 16383
 #define analogAverages 5
-#define irSensorPin A8
+#define irSignalPin A8
 
 // Circuit Specific Definitions.
 #define scaleVadc 5.0 // All signals 0->5 volts.
 #define vDrive 5.0 // Driver peak voltage.
-
-// Variables for loop control
-elapsedMicros loopTime; // loopTime used to force precise deltaT between starts
-unsigned int headroom;  // Headroom=post execution time before next loop start.
-boolean switchFlag;  // Used to monitor loop timing.
-unsigned int alternateCount;  // Used to count loops since last alternate
-float realTime = deltaT * 1.0e-6;
 
 // Set up pins
 void setup() {
@@ -64,51 +85,57 @@ void setup() {
 
   // Set up outputs
   analogWriteResolution(dacRes);
+  pinMode(4, OUTPUT);
+  pinMode(5, OUTPUT);
+  pinMode(6,OUTPUT);
   pinMode(7, OUTPUT);
   pinMode(8, OUTPUT);
   pinMode(9, OUTPUT);
   pinMode(10, OUTPUT);
-  pinMode(11, OUTPUT);
-  pinMode(12, OUTPUT);
-
-   // Set up side B for external bidirectional, A for unidirectional.
+  pinMode(A14, OUTPUT);
+ 
+  // Set up side B for external bidirectional, A for unidirectional.
   digitalWrite(hbIn1B,HIGH);
   digitalWrite(hbIn2B, HIGH);
-  digitalWrite(hbIn1A, LOW);
+  digitalWrite(hbIn1A, HIGH);
   digitalWrite(hbIn2A, LOW);
   digitalWrite(hbMode, HIGH);
 
   // Set PWM frequency
   analogWriteFrequency(motorOutPWM,23437.5); // Changes several timers!!!
-  analogWrite(motorOutPWM, LOW);  
+  analogWrite(motorOutPWM, LOW);
 }
 
-void loop() {  // Main code, runs repeatedly
-
+void loop() {  // Main code, runs repeatedly 
+  // Reinitializes or updates from sliders on GUI.
+  startup();
+  
   // Make sure loop starts deltaT microsecs since last start
   unsigned int newHeadroom = max(int(deltaT) - int(loopTime), 0);
   headroom = min(headroom, newHeadroom);
-
-  while (int(loopTime) < int(deltaT)) {}; // looptime is an elapsedtime var.
+  
+  while (int(loopTime) < int(deltaT)) {};
   loopTime = 0;
-
-  // Monitor Output should be an exact square wave with frequency = 1/(2*deltaT)
+  
+  // Monitor Output should be a square wave with frequency = 1/(2*deltaT) 
   switchFlag = !switchFlag;
   digitalWrite(monitorPin, switchFlag);
 
+  /*************** Section of Likely User modifications.**********************/
   // Read analog values and average to reduce noise.
+  int angleI = 0;
   int motorI = 0;
   int pwmI = 0;
-  int heightI = 0;
   for (int i = 0; i < analogAverages; i++) {
+    angleI += analogRead(angleSensorPin);
     motorI += analogRead(motorVoltageSensorPin);
     pwmI += analogRead(pwmVoltageSensorPin);
-    heightI += analogRead(irSensorPin);
   }
+  // Note that the minus sign multiplying the angle is just for consistency with previous labs.
+  float angleV = angleOffsetV-scaleVadc*float(angleI- analogAverages*adcCenter)/float(analogAverages*adcMax);
   float motorV = scaleVadc * float(motorI) / float(analogAverages*adcMax);
   float pwmV = scaleVadc * float(pwmI) / float(analogAverages*adcMax);
-  float heightV = scaleVadc * float(heightI) / float(analogAverages*adcMax);
-
+  
   // backEMF = valtage across motor - voltage across motor internal resistance.
   // The voltage across the motor internal inductance assumed neglible.
   // We measure the voltage across an external current sense resistor, 
@@ -116,39 +143,157 @@ void loop() {  // Main code, runs repeatedly
   // and a fraction of rsenseV is subtracted from motorV to get the backEMF.
   // That fraction is the ratio of the sense resistor to the internal
   // motor resistor (and must be calibrated by experiment).
-  #define RmotorOverRsense 0.7
-  float BackEMF = motorV - RmotorOverRsense * (pwmV - motorV);
+  // WE LINEARIZED THE BackEMF to THRUST relation, you must use nominalBemfV in the line below!!!!
+  #define RmotorOverRsense 0.8
+  float backEmfV =  motorV - RmotorOverRsense * (pwmV - motorV);
+  float deltaVemf = backEmfV - nominalBemfV;
+  
+  // Compute omega = delta in arm angle divided by delta in time.
+  float omegaV = (angleV - pastAngleV[pastSize-1])*scaleDeriv;
 
-  // Error is the difference between desired deltaBackEMF and 
-  // the measured deltaBackEMF. 
-  float measuredDeltaBackEMF = (BackEMF - nominalBackEMF);
-  float errorV = (desiredDeltaBackEMF - measuredDeltaBackEMF);
+  // *************calculate the motor command signal here***********************
+  // States are angleV (angle), omegaV (d(angleV)/dt), deltaVemf, Input is desiredAngleV
+    // Read analog values and average to reduce noise.
+  int irRead = 0;
+  for (int i = 0; i < analogAverages; i++) {
+    irRead += analogRead(irSignalPin);
+  }
+  float irV = scaleVadc * float(irRead) / float(analogAverages*adcMax);
+  float elev_h = 20.0/(irV-0.25);
+  float errorH = 25.0 - elev_h;
+  
+  float motorCmd = errorH*30.0;// directV + Kr*desiredAngleV - (Kemf*deltaVemf + Komega*omegaV + Kangle*angleV);
 
-  // Angle error
-  float actualHeight = 20/(heightV-0.25);
-  float errorH = (desiredHeight - actualHeight);
-
-  // The Motor Command is a sum of a direct term and a gain*error
-  float motorCmd = KpA * errorH;
-  /*if (motorCmd >0 )  {
+  if (motorCmd >0 )  {
     digitalWrite(hbIn1A, LOW);
   } else {
     digitalWrite(hbIn1A, HIGH);
-  }*/
+  }
 
-  // Limit the motor command and write it out.
+  
   float motorCmdLim = min(abs(motorCmd), vDrive);
-  analogWrite(motorOutPWM, int((motorCmdLim / vDrive)*dacMax));
+  analogWrite(motorOutPWM,int((motorCmdLim/vDrive)*dacMax));
   //analogWrite(A14,int((motorCmdLim/vDrive)*dacMax));
+  
+  // Update previous errors for next time.
+  for (int i = pastSize-1; i > 0; i--) pastAngleV[i] = pastAngleV[i-1];
+  pastAngleV[0] = angleV;
 
-  // If the alternate flag is set, alternate every alternate period.
-  alternateCount += 1;
-  if (float(alternateCount)*realTime > alternatePeriod) {
-    alternateCount = 0;
-    desiredDeltaBackEMF = -desiredDeltaBackEMF;
-    headroom = deltaT;
-  };
 
-  // Print out BackEMF in millivolts so that the serial plotter autoscales.
-  Serial.println(errorH);
+  
+  if (loopCounter == numSkip) {  
+    float errorV = (desiredAngleV - angleV);
+    packStatus(buf, angleV, omegaV, deltaVemf, errorV, motorCmdLim, float(headroom));
+    Serial.println(errorH);
+    loopCounter = 0;
+  } else loopCounter += 1;
+
 }
+
+void init_loop() {
+  // Initialize loop variables
+  loopCounter = 0; 
+  headroom = deltaT;
+  // Zero past errors
+  for (int i = pastSize-1; i >= 0; i--) pastAngleV[i] = 0;
+}
+
+
+void processString(String inputString) {
+char St = inputString.charAt(0);
+  inputString.remove(0,1);
+  float val = inputString.toFloat();
+  switch (St) {
+//    case 'B': 
+//      K1 = val;
+//      break;
+//    case 'C':
+//      K2 = val;
+//      break;  
+//    case 'D':
+//      K3 = val;
+//      break;
+//    case 'U':
+//      Ku = val;
+//      break;
+//    case 'O':  
+//      directV = val;
+//      break;
+    case 'A':
+      desiredAngleV = val;
+      break;
+    case '~':
+      first_time = true;
+      break;
+    default:
+    break;  
+  }
+}
+
+// Load the serial output buffer.
+void packStatus(char *buf, float a, float b, float c, float d, float e, float f) {
+  
+  // Start Byte.
+  buf[0] = byte(0);
+  int n = 1; 
+  
+  memcpy(&buf[n],&a,sizeof(a));
+  n+=sizeof(a);
+  memcpy(&buf[n],&b,sizeof(b));
+  n+=sizeof(b);
+  memcpy(&buf[n],&c,sizeof(c));
+  n+=sizeof(c);
+  memcpy(&buf[n],&d,sizeof(d));
+  n+=sizeof(d);
+  memcpy(&buf[n],&e,sizeof(e));
+  n+=sizeof(e);
+  memcpy(&buf[n],&f,sizeof(f));
+  n+=sizeof(f);
+  //memcpy(&buf[n],&g,sizeof(g));
+  //n+=sizeof(g);
+
+  // Stop byte (255 otherwise unused).
+  buf[n] = byte(255); 
+}
+
+// Initializes the loop if this is the first time, or if reconnect sent
+// from GUI.  Otherwise, just look for serial event.
+void startup(){
+  if (first_time) {
+    while(Serial.available() > 0) Serial.read(); // Clear out rcvr.
+    Serial.println(config_message);  // Send the configuration files.
+    while (! Serial.available()) {}  // Wait for serial return.
+    while(Serial.available() > 0) {   // Clear out rcvr.
+        Serial.read();
+        //char inChar = (char) Serial.read(); 
+        //if (inChar == '\n') break;
+    }
+    init_loop();
+    first_time = false;
+  } else {
+    serialEvent();
+  }
+}
+
+
+// Simple serial event, only looks for disconnect character, resets loop if found.
+
+void serialEvent() {
+  String inputString = ""; 
+  while (Serial.available()) {
+    char inChar = (char)Serial.read();
+    // if the incoming character is a newline, ready to process.
+    if (inChar == '~') { // Got a disconnect
+      first_time = true;
+      break;
+    }
+    inputString += inChar;
+    // if the incoming character is a newline, ready to process.
+    if (inChar == '\n') {
+      processString(inputString);
+      inputString = "";
+      break;
+    }
+  }
+}
+
