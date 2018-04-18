@@ -20,6 +20,7 @@ float scaleDeriv = 1.0/(dTsec*pastSize); // Divide deltas by interval.
 
 float errorVintegral;                // Variable for integrating angle errors.
 float integralMax = 200;            // Maximum value of the integral
+int desiredHeight = 25.0;
 
 // ***************************************************************
 // Variables for loop control 
@@ -160,7 +161,7 @@ void loop() {  // Main code, runs repeatedly
   }
   float irV = scaleVadc * float(irRead) / float(analogAverages*adcMax);
   float elev_h = 20.0/(irV-0.25);
-  float errorH = 25.0 - elev_h;
+  float errorH = desiredHeight - elev_h;
   
   float motorCmd = errorH*30.0;// directV + Kr*desiredAngleV - (Kemf*deltaVemf + Komega*omegaV + Kangle*angleV);
 
