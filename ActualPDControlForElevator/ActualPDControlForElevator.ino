@@ -1,9 +1,15 @@
 #include <math.h>
 
-// Calibration Variables
-float directV = 3.30;  // RESET THIS VALUE with zero state gains so the prop is nominally horizontal
-float nominalBemfV = 1.18; // RESET THIS VALUE of motorBemf when horizontal, to use in  linearization
-float angleOffsetV = 0.13;  // RESET THIS VALUE precisely horizontal arm --> precisely zero angle
+// Variables To Modify ******************************
+float direct = 2.5;
+
+// Variables to set using sliders
+float Kp = 10.0; // Proportional Gain for Angle Error
+float Kd = 0.0; // Delta gain
+float Kbemf = 0.0;
+float Ku = 0.0;
+float Ki = 0.0;
+float desired = 0.0;
 
 // Gains
 float Kangle = 10.9091; // Gain for arm angle state
@@ -30,10 +36,15 @@ unsigned int alternateCount;  // Used to count loops since last alternate
 int loopCounter;
 #define numSkip 20
 bool first_time = false;
-String config_message = "&A~Desired~5&C&S~Desired~A~-3.0~3.0~0.1&T~Theta~F4~-3.0~3.0&T~Omega~F4~-10.0~10.0&T~Vbemf~F4~-5.0~5.0&T~Error~F4~-3.0~3.0&T~MCmd~F4~0~5&D~100&H~4&";
-                        
+
+
+// Pick Arduino or Browser Monitor **********************************
+boolean useBrowser = false;
+String config_message_30_bytes = "&A~DesiredAng~5&C&S~DesiredAng~A~-1~1~0.1&S~Kp~P~0~20~0.1&S~Kd~D~0~5~0.1&S~Ki~I~0~5~0.1&T~Angle~F4~-2.5~2.5&T~Error~F4~-5~5&T~Deriv~F4~-10~10&T~Sum~F4~-100~100&T~Cmd~F4~0~5&D~100&H~4&";
+String config_message = config_message_30_bytes; 
+
 // Storage for past values.
-float pastAngleV[pastSize]; 
+float pastHeight[pastSize]; 
 
 // Storage for browser communication
 char buf[60]; 
@@ -121,36 +132,6 @@ void loop() {  // Main code, runs repeatedly
   switchFlag = !switchFlag;
   digitalWrite(monitorPin, switchFlag);
 
-  /*************** Section of Likely User modifications.**********************/
-  // Read analog values and average to reduce noise.
-  int angleI = 0;
-  int motorI = 0;
-  int pwmI = 0;
-  for (int i = 0; i < analogAverages; i++) {
-    angleI += analogRead(angleSensorPin);
-    motorI += analogRead(motorVoltageSensorPin);
-    pwmI += analogRead(pwmVoltageSensorPin);
-  }
-  // Note that the minus sign multiplying the angle is just for consistency with previous labs.
-  float angleV = angleOffsetV-scaleVadc*float(angleI- analogAverages*adcCenter)/float(analogAverages*adcMax);
-  float motorV = scaleVadc * float(motorI) / float(analogAverages*adcMax);
-  float pwmV = scaleVadc * float(pwmI) / float(analogAverages*adcMax);
-  
-  // backEMF = valtage across motor - voltage across motor internal resistance.
-  // The voltage across the motor internal inductance assumed neglible.
-  // We measure the voltage across an external current sense resistor, 
-  //                      rsenseV = pwmV - motorV,
-  // and a fraction of rsenseV is subtracted from motorV to get the backEMF.
-  // That fraction is the ratio of the sense resistor to the internal
-  // motor resistor (and must be calibrated by experiment).
-  // WE LINEARIZED THE BackEMF to THRUST relation, you must use nominalBemfV in the line below!!!!
-  #define RmotorOverRsense 0.8
-  float backEmfV =  motorV - RmotorOverRsense * (pwmV - motorV);
-  float deltaVemf = backEmfV - nominalBemfV;
-  
-  // Compute omega = delta in arm angle divided by delta in time.
-  float omegaV = (angleV - pastAngleV[pastSize-1])*scaleDeriv;
-
   // *************calculate the motor command signal here***********************
   // States are angleV (angle), omegaV (d(angleV)/dt), deltaVemf, Input is desiredAngleV
     // Read analog values and average to reduce noise.
@@ -160,9 +141,10 @@ void loop() {  // Main code, runs repeatedly
   }
   float irV = scaleVadc * float(irRead) / float(analogAverages*adcMax);
   float elev_h = 20.0/(irV-0.25);
-  float errorH = 25.0 - elev_h;
+  float errorH = (desired+15.0) - elev_h;
+  float errorDiff = (errorH-pastHeight[pastSize-1])*scaleDeriv;
   
-  float motorCmd = errorH*30.0;// directV + Kr*desiredAngleV - (Kemf*deltaVemf + Komega*omegaV + Kangle*angleV);
+  float motorCmd = errorH * Kp + errorDiff * Kd;
 
   if (motorCmd >0 )  {
     digitalWrite(hbIn1A, LOW);
@@ -176,18 +158,20 @@ void loop() {  // Main code, runs repeatedly
   //analogWrite(A14,int((motorCmdLim/vDrive)*dacMax));
   
   // Update previous errors for next time.
-  for (int i = pastSize-1; i > 0; i--) pastAngleV[i] = pastAngleV[i-1];
-  pastAngleV[0] = angleV;
+  for (int i = pastSize-1; i > 0; i--) pastHeight[i] = pastHeight[i-1];
+  pastHeight[0] = elev_h;
 
-
-  
   if (loopCounter == numSkip) {  
-    float errorV = (desiredAngleV - angleV);
-    packStatus(buf, angleV, omegaV, deltaVemf, errorV, motorCmdLim, float(headroom));
-    Serial.println(errorH);
+    if (useBrowser) {
+      packStatus(buf, elev_h, errorH, errorDiff, 0.0, motorCmdLim, float(headroom));
+      Serial.write(buf,26);
+    } else {
+      // Print out in millivolts so that the serial plotter autoscales.
+      Serial.println(motorCmd);
+    }
     loopCounter = 0;
+    headroom = deltaT;
   } else loopCounter += 1;
-
 }
 
 void init_loop() {
@@ -195,7 +179,7 @@ void init_loop() {
   loopCounter = 0; 
   headroom = deltaT;
   // Zero past errors
-  for (int i = pastSize-1; i >= 0; i--) pastAngleV[i] = 0;
+  for (int i = pastSize-1; i >= 0; i--) pastHeight[i] = 0;
 }
 
 
@@ -204,23 +188,26 @@ char St = inputString.charAt(0);
   inputString.remove(0,1);
   float val = inputString.toFloat();
   switch (St) {
-//    case 'B': 
-//      K1 = val;
-//      break;
-//    case 'C':
-//      K2 = val;
-//      break;  
-//    case 'D':
-//      K3 = val;
-//      break;
-//    case 'U':
-//      Ku = val;
-//      break;
-//    case 'O':  
-//      directV = val;
-//      break;
+    case 'P': 
+      Kp = val;
+      break;
+    case 'D':
+      Kd = val;
+      break;  
+    case 'E':
+      Kbemf = val;
+      break;
+    case 'U':
+      Ku = val;
+      break;
+    case 'I':
+      Ki = val;
+      break;  
+    case 'O':  
+      direct = val;
+      break;
     case 'A':
-      desiredAngleV = val;
+      desired = val;
       break;
     case '~':
       first_time = true;
@@ -249,8 +236,10 @@ void packStatus(char *buf, float a, float b, float c, float d, float e, float f)
   n+=sizeof(e);
   memcpy(&buf[n],&f,sizeof(f));
   n+=sizeof(f);
-  //memcpy(&buf[n],&g,sizeof(g));
-  //n+=sizeof(g);
+  /*
+  memcpy(&buf[n],&g,sizeof(g));
+   n+=sizeof(g);
+   */
 
   // Stop byte (255 otherwise unused).
   buf[n] = byte(255); 
@@ -278,15 +267,11 @@ void startup(){
 
 // Simple serial event, only looks for disconnect character, resets loop if found.
 
+// Simple serial event, only looks for disconnect character, resets loop if found.
 void serialEvent() {
   String inputString = ""; 
   while (Serial.available()) {
     char inChar = (char)Serial.read();
-    // if the incoming character is a newline, ready to process.
-    if (inChar == '~') { // Got a disconnect
-      first_time = true;
-      break;
-    }
     inputString += inChar;
     // if the incoming character is a newline, ready to process.
     if (inChar == '\n') {
