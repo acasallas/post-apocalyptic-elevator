@@ -4,7 +4,7 @@
 float direct = 2.5;
 
 // Variables to set using sliders
-float Kp = 10.0; // Proportional Gain for Angle Error
+float Kp = 0.0; // Proportional Gain for Angle Error
 float Kd = 0.0; // Delta gain
 float Kbemf = 0.0;
 float Ku = 0.0;
@@ -18,7 +18,7 @@ float Kemf= 0;//10.2397;  // Gain for backEmf state
 float Kr = 10.9091; // Change Kr with K!! 
 
 // Loop timing, Derivative and integral variables
-unsigned int deltaT = 1000;         // Sample period in microseconds.
+unsigned int deltaT = 35000;         // Sample period in microseconds.
 
 #define pastSize 5                 // interval for delta, larger=less noise, more delay.
 float dTsec = 1.0e-6*deltaT;       // The period in seconds. 
@@ -26,7 +26,6 @@ float scaleDeriv = 1.0/(dTsec*pastSize); // Divide deltas by interval.
 
 float errorVintegral;                // Variable for integrating angle errors.
 float integralMax = 200;            // Maximum value of the integral
-int desiredHeight = 25.0;
 
 // ***************************************************************
 // Variables for loop control 
@@ -35,12 +34,12 @@ unsigned int headroom;  // Headroom=post execution time before next loop start.
 boolean switchFlag;  // Used to monitor loop timing.
 unsigned int alternateCount;  // Used to count loops since last alternate
 int loopCounter;
-#define numSkip 20
+#define numSkip 5
 bool first_time = false;
 
 
 // Pick Arduino or Browser Monitor **********************************
-boolean useBrowser = false;
+boolean useBrowser = true;
 String config_message_30_bytes = "&A~DesiredAng~5&C&S~DesiredAng~A~-1~1~0.1&S~Kp~P~0~20~0.1&S~Kd~D~0~5~0.1&S~Ki~I~0~5~0.1&T~Angle~F4~-2.5~2.5&T~Error~F4~-5~5&T~Deriv~F4~-10~10&T~Sum~F4~-100~100&T~Cmd~F4~0~5&D~100&H~4&";
 String config_message = config_message_30_bytes; 
 
@@ -142,12 +141,8 @@ void loop() {  // Main code, runs repeatedly
   }
   float irV = scaleVadc * float(irRead) / float(analogAverages*adcMax);
   float elev_h = 20.0/(irV-0.25);
-<<<<<<< HEAD:ActualPDControlForElevator/ActualPDControlForElevator.ino
-  float errorH = (desired+15.0) - elev_h;
-  float errorDiff = (errorH-pastHeight[pastSize-1])*scaleDeriv;
-=======
-  float errorH = desiredHeight - elev_h;
->>>>>>> d0d1526687d991fd44a484293222d2778752e8bf:ProportionalControlForElevator/ProportionalControlForElevator.ino
+  float errorH = ((desired*10)+20.0) - elev_h;
+  float errorDiff = (errorH-pastHeight[pastSize-1]);
   
   float motorCmd = errorH * Kp + errorDiff * Kd;
 
@@ -164,15 +159,15 @@ void loop() {  // Main code, runs repeatedly
   
   // Update previous errors for next time.
   for (int i = pastSize-1; i > 0; i--) pastHeight[i] = pastHeight[i-1];
-  pastHeight[0] = elev_h;
+  pastHeight[0] = errorH;
 
   if (loopCounter == numSkip) {  
     if (useBrowser) {
-      packStatus(buf, elev_h, errorH, errorDiff, 0.0, motorCmdLim, float(headroom));
+      packStatus(buf, irV, errorH, errorDiff, 0.0, motorCmdLim, float(headroom));
       Serial.write(buf,26);
     } else {
       // Print out in millivolts so that the serial plotter autoscales.
-      Serial.println(motorCmd);
+      Serial.println(irV);
     }
     loopCounter = 0;
     headroom = deltaT;
