@@ -138,7 +138,7 @@ void loop() {  // Main code, runs repeatedly
   float errorH = ((desired*10)+20.0) - elev_h;
   float errorDiff = (errorH-pastHeight[pastSize-1]);
   
-  float motorCmd = 3.0;
+  float motorCmd = -4.5;
 
   if (motorCmd >0 )  {
     digitalWrite(hbIn1A, LOW);
