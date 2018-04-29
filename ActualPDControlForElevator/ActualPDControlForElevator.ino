@@ -2,8 +2,8 @@
 
 // Variables To Modify ******************************
 float direct = 2.5;
-float constantup = 4.5;
-float constantdown = -4.5;
+float constantup = 1.0;
+float constantdown = -1.0;
 int moving = 0; //0: still, 1: down, 2: up (can make this enum)
 int wait = 100;
 
