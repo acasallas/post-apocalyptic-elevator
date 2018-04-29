@@ -2,6 +2,9 @@
 
 // Variables To Modify ******************************
 float direct = 2.5;
+float constant = 3.0;
+int moving = 0; //0: still, 1: down, 2: up (can make this enum)
+int wait = 100;
 
 // Variables to set using sliders
 float Kp = 0.0; // Proportional Gain for Angle Error
@@ -137,8 +140,33 @@ void loop() {  // Main code, runs repeatedly
   float elev_h = sqrt(268.31/(irV-.7301));
   float errorH = ((desired*10)+20.0) - elev_h;
   float errorDiff = (errorH-pastHeight[pastSize-1]);
-  
-  float motorCmd = -4.5;
+
+  float motorCmd = 0.0;
+  if (moving == 0) {
+    if (wait > 0) {
+      wait--;
+    } else {
+      if (elev_h < 25.0) {
+        moving = 1;
+      } else {
+        moving = 2;
+      }
+    }
+  } else if (moving == 1) {
+    if (elev_h > 34.0) {
+      moving = 0;
+      wait = 100;
+    } else {
+      motorCmd = constant;
+    }
+  } else if (moving == 2) {
+    if (elev_h < 18.0) {
+      moving = 0;
+      wait = 100;
+    } else {
+      motorCmd = -1*constant;
+    }    
+  }
 
   if (motorCmd >0 )  {
     digitalWrite(hbIn1A, LOW);
