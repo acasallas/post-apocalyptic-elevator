@@ -2,7 +2,8 @@
 
 // Variables To Modify ******************************
 float direct = 2.5;
-float constant = 3.0;
+float constantup = 4.5;
+float constantdown = -4.5;
 int moving = 0; //0: still, 1: down, 2: up (can make this enum)
 int wait = 100;
 
@@ -157,14 +158,14 @@ void loop() {  // Main code, runs repeatedly
       moving = 0;
       wait = 100;
     } else {
-      motorCmd = constant;
+      motorCmd = constantup;
     }
   } else if (moving == 2) {
     if (elev_h < 18.0) {
       moving = 0;
       wait = 100;
     } else {
-      motorCmd = -1*constant;
+      motorCmd = constantdown;
     }    
   }
 
