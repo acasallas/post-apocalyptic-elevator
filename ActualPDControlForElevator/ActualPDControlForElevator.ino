@@ -11,16 +11,10 @@ float Ku = 0.0;
 float Ki = 0.0;
 float desired = 0.0;
 
-// Gains
-float Kangle = 10.9091; // Gain for arm angle state
-float Komega = 2; // Gain for arm rotational velocity state
-float Kemf= 0;//10.2397;  // Gain for backEmf state
-float Kr = 10.9091; // Change Kr with K!! 
-
 // Loop timing, Derivative and integral variables
 unsigned int deltaT = 35000;         // Sample period in microseconds.
 
-#define pastSize 5                 // interval for delta, larger=less noise, more delay.
+#define pastSize 1                 // interval for delta, larger=less noise, more delay.
 float dTsec = 1.0e-6*deltaT;       // The period in seconds. 
 float scaleDeriv = 1.0/(dTsec*pastSize); // Divide deltas by interval.   
 
@@ -140,7 +134,7 @@ void loop() {  // Main code, runs repeatedly
     irRead += analogRead(irSignalPin);
   }
   float irV = scaleVadc * float(irRead) / float(analogAverages*adcMax);
-  float elev_h = 20.0/(irV-0.25);
+  float elev_h = sqrt(268.31/(irV-.7301));
   float errorH = ((desired*10)+20.0) - elev_h;
   float errorDiff = (errorH-pastHeight[pastSize-1]);
   
@@ -163,7 +157,7 @@ void loop() {  // Main code, runs repeatedly
 
   if (loopCounter == numSkip) {  
     if (useBrowser) {
-      packStatus(buf, irV, errorH, errorDiff, 0.0, motorCmdLim, float(headroom));
+      packStatus(buf, elev_h, errorH, errorDiff, 0.0, motorCmdLim, float(headroom));
       Serial.write(buf,26);
     } else {
       // Print out in millivolts so that the serial plotter autoscales.
