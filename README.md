@@ -9,4 +9,4 @@ The graphs are titled v_openloop.png, where v is the voltage applied in millivol
 
 #cutoff (minimum Voltage required to overcome static friciton)
 0.95 V up
-0.55 V down
+-0.55 V down
