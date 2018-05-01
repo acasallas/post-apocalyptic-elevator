@@ -14,6 +14,8 @@ float Kbemf = 0.0;
 float Ku = 0.0;
 float Ki = 0.0;
 float desired = 0.0;
+float sum = 0.0;
+float sumMax = 2.0;
 
 // Loop timing, Derivative and integral variables
 unsigned int deltaT = 35000;         // Sample period in microseconds.
@@ -141,7 +143,12 @@ void loop() {  // Main code, runs repeatedly
   float elev_h = sqrt(268.31/(irV-.7301));
   float errorH = ((desired*10)+20.0) - elev_h;
   float errorDiff = (errorH-pastHeight[pastSize-1]);
+  sum = max(min(sum+errorH,sumMax),-sumMax);
+  
 
+  float motorCmd = Kp*errorH + Kd*errorDiff + Ki*sum;
+
+  /*
   float motorCmd = 0.0;
   if (moving == 0) {
     if (wait > 0) {
@@ -167,7 +174,7 @@ void loop() {  // Main code, runs repeatedly
     } else {
       motorCmd = constantdown;
     }    
-  }
+  }*/
 
   if (motorCmd >0 )  {
     digitalWrite(hbIn1A, LOW);
