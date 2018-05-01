@@ -154,7 +154,7 @@ void loop() {  // Main code, runs repeatedly
       }
     }
   } else if (moving == 1) {
-    if (elev_h > 34.0) {
+    if (elev_h > 32.0) {
       moving = 0;
       wait = 100;
     } else {
