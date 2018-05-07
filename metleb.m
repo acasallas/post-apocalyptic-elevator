@@ -2,11 +2,11 @@ z = tf([1 0], [1], -1);
 
 dt = 1;
 constant = 5;
-kp = 15;
-kd = .04;
-ki = 0.3;
+kp = 20;
+kd = 70;
+ki = 100;
 m = 1;
-gamma = 13.23;
+gamma = 0.0299*2;
 
 sys = z^2/(constant*(z^2-2*(z)+1));
 pole(sys)
