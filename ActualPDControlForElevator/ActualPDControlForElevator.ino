@@ -3,7 +3,7 @@
 // Variables To Modify ******************************
 float direct = 2.5;
 float upValues[] = {1.250, 1.500, 1.750, 2.000, 2.250, 2.500, 2.750, 3.000, 3.250, 3.500, 3.750, 4.000, 4.250, 4.500, 4.750, 5.000};
-float downValues[] = {1.250, -1.500, -1.750, -2.000, -2.250, -2.500, -2.750, -3.000, -3.250, -3.500, -3.750, -4.000, -4.250, -4.500, -4.750, -5.000};
+float downValues[] = {-1.250, -1.500, -1.750, -2.000, -2.250, -2.500, -2.750, -3.000, -3.250, -3.500, -3.750, -4.000, -4.250, -4.500, -4.750, -5.000};
 int numValues = 16;
 int valIndex = 0;
 int moving = 0; //0: still, 1: down, 2: up (can make this enum)
@@ -156,13 +156,15 @@ void loop() {  // Main code, runs repeatedly
     if (wait > 0) {
       wait--;
     } else {
-      if (valIndex >= numValues-1) {
-        valIndex = 0;
-      } else {
-        valIndex++;
-      }
+
       
       if (elev_h < 25.0) {
+        if (valIndex >= numValues-1) {
+          valIndex = 0;
+        } else {
+          valIndex++;
+        }
+        
         moving = 1;
       } else {
         moving = 2;
