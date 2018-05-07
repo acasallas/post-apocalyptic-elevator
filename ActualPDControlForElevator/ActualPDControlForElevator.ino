@@ -2,8 +2,10 @@
 
 // Variables To Modify ******************************
 float direct = 2.5;
-float constantup = 5.00;
-float constantdown = -5.00;
+float upValues[] = {1.250, 1.500, 1.750, 2.000, 2.250, 2.500, 2.750, 3.000, 3.250, 3.500, 3.750, 4.000, 4.250, 4.500, 4.750, 5.000};
+float downValues[] = {1.250, -1.500, -1.750, -2.000, -2.250, -2.500, -2.750, -3.000, -3.250, -3.500, -3.750, -4.000, -4.250, -4.500, -4.750, -5.000};
+int numValues = 16;
+int valIndex = 0;
 int moving = 0; //0: still, 1: down, 2: up (can make this enum)
 int wait = 100;
 
@@ -146,14 +148,20 @@ void loop() {  // Main code, runs repeatedly
   sum = max(min(sum+errorH,sumMax),-sumMax);
   
 
-  float motorCmd = Kp*errorH + Kd*errorDiff + Ki*sum;
+  //float motorCmd = Kp*errorH + Kd*errorDiff + Ki*sum;
 
-  /*
+  
   float motorCmd = 0.0;
   if (moving == 0) {
     if (wait > 0) {
       wait--;
     } else {
+      if (valIndex >= numValues-1) {
+        valIndex = 0;
+      } else {
+        valIndex++;
+      }
+      
       if (elev_h < 25.0) {
         moving = 1;
       } else {
@@ -165,16 +173,16 @@ void loop() {  // Main code, runs repeatedly
       moving = 0;
       wait = 100;
     } else {
-      motorCmd = constantup;
+      motorCmd = upValues[valIndex];
     }
   } else if (moving == 2) {
     if (elev_h < 18.0) {
       moving = 0;
       wait = 100;
     } else {
-      motorCmd = constantdown;
+      motorCmd = downValues[valIndex];
     }    
-  }*/
+  }
 
   if (motorCmd >0 )  {
     digitalWrite(hbIn1A, LOW);
@@ -197,7 +205,7 @@ void loop() {  // Main code, runs repeatedly
       Serial.write(buf,26);
     } else {
       // Print out in millivolts so that the serial plotter autoscales.
-      Serial.println(irV);
+      Serial.println(elev_h);
     }
     loopCounter = 0;
     headroom = deltaT;
