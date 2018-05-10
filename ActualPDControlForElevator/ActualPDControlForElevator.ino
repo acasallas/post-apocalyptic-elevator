@@ -22,7 +22,7 @@ float sumMax = 2.0;
 // Loop timing, Derivative and integral variables
 unsigned int deltaT = 35000;         // Sample period in microseconds.
 
-#define pastSize 5                 // interval for delta, larger=less noise, more delay.
+#define pastSize 1                 // interval for delta, larger=less noise, more delay.
 #define averageSize 5
 float dTsec = 1.0e-6*deltaT;       // The period in seconds. 
 float scaleDeriv = 1.0/(dTsec*pastSize); // Divide deltas by interval.   
@@ -159,7 +159,7 @@ void loop() {  // Main code, runs repeatedly
 
   float pastError = 0.0;
   for (int i = pastSize; i < (averageSize+pastSize); i++) {
-    pastError += pastHeight[i]-((desired*10)+18.0);
+    pastError += ((desired*10)+18.0)-pastHeight[i];
   }
   pastError = float(pastError)/float(averageSize);
   
@@ -226,7 +226,7 @@ void loop() {  // Main code, runs repeatedly
       Serial.write(buf,26);
     } else {
       // Print out in millivolts so that the serial plotter autoscales.
-      Serial.println(avgHeight);
+      Serial.println(dTsec);
     }
     loopCounter = 0;
     headroom = deltaT;
@@ -251,7 +251,7 @@ char St = inputString.charAt(0);
       Kp = val;
       break;
     case 'D':
-      Kd = val*10;
+      Kd = val;
       break;  
     case 'E':
       Kbemf = val;
