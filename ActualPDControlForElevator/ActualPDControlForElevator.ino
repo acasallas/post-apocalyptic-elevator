@@ -22,7 +22,8 @@ float sumMax = 2.0;
 // Loop timing, Derivative and integral variables
 unsigned int deltaT = 35000;         // Sample period in microseconds.
 
-#define pastSize 1                 // interval for delta, larger=less noise, more delay.
+#define pastSize 5                 // interval for delta, larger=less noise, more delay.
+#define averageSize 5
 float dTsec = 1.0e-6*deltaT;       // The period in seconds. 
 float scaleDeriv = 1.0/(dTsec*pastSize); // Divide deltas by interval.   
 
@@ -36,7 +37,7 @@ unsigned int headroom;  // Headroom=post execution time before next loop start.
 boolean switchFlag;  // Used to monitor loop timing.
 unsigned int alternateCount;  // Used to count loops since last alternate
 int loopCounter;
-#define numSkip 5
+#define numSkip 0
 bool first_time = false;
 
 
@@ -46,7 +47,7 @@ String config_message_30_bytes = "&A~DesiredAng~5&C&S~DesiredAng~A~-1~1~0.1&S~Kp
 String config_message = config_message_30_bytes; 
 
 // Storage for past values.
-float pastHeight[pastSize]; 
+float pastHeight[pastSize+averageSize]; 
 
 // Storage for browser communication
 char buf[60]; 
@@ -143,14 +144,32 @@ void loop() {  // Main code, runs repeatedly
   }
   float irV = scaleVadc * float(irRead) / float(analogAverages*adcMax);
   float elev_h = sqrt(268.31/(irV-.7301));
-  float errorH = ((desired*10)+20.0) - elev_h;
-  float errorDiff = (errorH-pastHeight[pastSize-1]);
+  
+  
+  for (int i = (pastSize+averageSize)-1; i > 0; i--) pastHeight[i] = pastHeight[i-1];
+  pastHeight[0] = elev_h;
+
+  float avgHeight = 0.0;
+  for (int i = 0; i < averageSize; i++) {
+    avgHeight += pastHeight[i];
+  }
+  avgHeight = float(avgHeight)/float(averageSize);
+  
+  float errorH = ((desired*10)+18.0) - avgHeight;
+
+  float pastError = 0.0;
+  for (int i = pastSize; i < (averageSize+pastSize); i++) {
+    pastError += pastHeight[i]-((desired*10)+18.0);
+  }
+  pastError = float(pastError)/float(averageSize);
+  
+  float errorDiff = (errorH-pastError)*scaleDeriv;
   sum = max(min(sum+errorH,sumMax),-sumMax);
   
 
-  //float motorCmd = Kp*errorH + Kd*errorDiff + Ki*sum;
+  float motorCmd = Kp*errorH + Kd*errorDiff + Ki*sum;
 
-  
+  /*
   float motorCmd = 0.0;
   if (moving == 0) {
     if (wait > 0) {
@@ -184,7 +203,7 @@ void loop() {  // Main code, runs repeatedly
     } else {
       motorCmd = downValues[valIndex];
     }    
-  }
+  }*/
 
   if (motorCmd >0 )  {
     digitalWrite(hbIn1A, LOW);
@@ -198,16 +217,16 @@ void loop() {  // Main code, runs repeatedly
   //analogWrite(A14,int((motorCmdLim/vDrive)*dacMax));
   
   // Update previous errors for next time.
-  for (int i = pastSize-1; i > 0; i--) pastHeight[i] = pastHeight[i-1];
-  pastHeight[0] = errorH;
+
+  
 
   if (loopCounter == numSkip) {  
     if (useBrowser) {
-      packStatus(buf, elev_h, errorH, errorDiff, 0.0, motorCmdLim, float(headroom));
+      packStatus(buf, avgHeight, errorH, errorDiff, 0.0, motorCmdLim, float(headroom));
       Serial.write(buf,26);
     } else {
       // Print out in millivolts so that the serial plotter autoscales.
-      Serial.println(elev_h);
+      Serial.println(avgHeight);
     }
     loopCounter = 0;
     headroom = deltaT;
@@ -232,7 +251,7 @@ char St = inputString.charAt(0);
       Kp = val;
       break;
     case 'D':
-      Kd = val;
+      Kd = val*10;
       break;  
     case 'E':
       Kbemf = val;
