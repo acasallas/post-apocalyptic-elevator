@@ -167,7 +167,7 @@ void loop() {  // Main code, runs repeatedly
   sum = max(min(sum+errorH,sumMax),-sumMax);
   
 
-  float motorCmd = Kp*errorH + Kd*errorDiff + Ki*sum;
+  float motorCmd = desired*10;//Kp*errorH + Kd*errorDiff + Ki*sum;
 
   /*
   float motorCmd = 0.0;
@@ -222,7 +222,7 @@ void loop() {  // Main code, runs repeatedly
 
   if (loopCounter == numSkip) {  
     if (useBrowser) {
-      packStatus(buf, avgHeight, errorH, errorDiff, 0.0, motorCmdLim, float(headroom));
+      packStatus(buf, avgHeight, errorH, errorDiff, sum, motorCmdLim, float(headroom));
       Serial.write(buf,26);
     } else {
       // Print out in millivolts so that the serial plotter autoscales.
