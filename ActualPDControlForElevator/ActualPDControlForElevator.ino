@@ -167,7 +167,7 @@ void loop() {  // Main code, runs repeatedly
   sum = max(min(sum+errorH,sumMax),-sumMax);
   
 
-  float motorCmd = desired*10;//Kp*errorH + Kd*errorDiff + Ki*sum;
+  float motorCmd = Kp*errorH + Kd*errorDiff + Ki*sum;
 
   /*
   float motorCmd = 0.0;
